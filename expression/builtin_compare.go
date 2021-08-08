@@ -376,33 +376,6 @@ func aggregateType(args []Expression) *types.FieldType {
 	return types.AggFieldType(fieldTypes)
 }
 
-// ResolveType4Between resolves eval type for between expression.
-func ResolveType4Between(args [3]Expression) types.EvalType {
-	cmpTp := args[0].GetType().EvalType()
-	for i := 1; i < 3; i++ {
-		cmpTp = getBaseCmpType(cmpTp, args[i].GetType().EvalType(), nil, nil)
-	}
-
-	hasTemporal := false
-	if cmpTp == types.ETString {
-		if args[0].GetType().Tp == mysql.TypeDuration {
-			cmpTp = types.ETDuration
-		} else {
-			for _, arg := range args {
-				if types.IsTypeTemporal(arg.GetType().Tp) {
-					hasTemporal = true
-					break
-				}
-			}
-			if hasTemporal {
-				cmpTp = types.ETDatetime
-			}
-		}
-	}
-
-	return cmpTp
-}
-
 // resolveType4Extremum gets compare type for GREATEST and LEAST and BETWEEN (mainly for datetime).
 func resolveType4Extremum(args []Expression) types.EvalType {
 	aggType := aggregateType(args)
@@ -1132,6 +1105,8 @@ func getBaseCmpType(lhs, rhs types.EvalType, lft, rft *types.FieldType) types.Ev
 	} else if lft != nil && rft != nil && (types.IsTemporalWithDate(lft.Tp) && rft.Tp == mysql.TypeYear ||
 		lft.Tp == mysql.TypeYear && types.IsTemporalWithDate(rft.Tp)) {
 		return types.ETDatetime
+		//} else if lhs == types.ETInt && rft != nil && types.IsBinaryStr(rft.Tp) {
+		//return ETInt
 	}
 	return types.ETReal
 }

@@ -1076,8 +1076,6 @@ func (er *expressionRewriter) Leave(originInNode ast.Node) (retNode ast.Node, ok
 			er.tryFoldCounter--
 		}
 		er.binaryOpToExpression(v)
-	case *ast.BetweenExpr:
-		er.betweenToExpression(v)
 	case *ast.CaseExpr:
 		if _, ok := expression.TryFoldFunctions["case"]; ok {
 			er.tryFoldCounter--
@@ -1582,80 +1580,6 @@ func (er *expressionRewriter) rowToScalarFunc(v *ast.RowExpr) {
 		er.err = err
 		return
 	}
-	er.ctxStackAppend(function, types.EmptyName)
-}
-
-func (er *expressionRewriter) wrapExpWithCast() (expr, lexp, rexp expression.Expression) {
-	stkLen := len(er.ctxStack)
-	expr, lexp, rexp = er.ctxStack[stkLen-3], er.ctxStack[stkLen-2], er.ctxStack[stkLen-1]
-	var castFunc func(sessionctx.Context, expression.Expression) expression.Expression
-	switch expression.ResolveType4Between([3]expression.Expression{expr, lexp, rexp}) {
-	case types.ETInt:
-		castFunc = expression.WrapWithCastAsInt
-	case types.ETReal:
-		castFunc = expression.WrapWithCastAsReal
-	case types.ETDecimal:
-		castFunc = expression.WrapWithCastAsDecimal
-	case types.ETString:
-		castFunc = func(ctx sessionctx.Context, e expression.Expression) expression.Expression {
-			// string kind expression do not need cast
-			if e.GetType().EvalType().IsStringKind() {
-				return e
-			}
-			return expression.WrapWithCastAsString(ctx, e)
-		}
-	case types.ETDuration:
-		expr = expression.WrapWithCastAsTime(er.sctx, expr, types.NewFieldType(mysql.TypeDuration))
-		lexp = expression.WrapWithCastAsTime(er.sctx, lexp, types.NewFieldType(mysql.TypeDuration))
-		rexp = expression.WrapWithCastAsTime(er.sctx, rexp, types.NewFieldType(mysql.TypeDuration))
-		return
-	case types.ETDatetime:
-		expr = expression.WrapWithCastAsTime(er.sctx, expr, types.NewFieldType(mysql.TypeDatetime))
-		lexp = expression.WrapWithCastAsTime(er.sctx, lexp, types.NewFieldType(mysql.TypeDatetime))
-		rexp = expression.WrapWithCastAsTime(er.sctx, rexp, types.NewFieldType(mysql.TypeDatetime))
-		return
-	default:
-		return
-	}
-
-	expr = castFunc(er.sctx, expr)
-	lexp = castFunc(er.sctx, lexp)
-	rexp = castFunc(er.sctx, rexp)
-	return
-}
-
-func (er *expressionRewriter) betweenToExpression(v *ast.BetweenExpr) {
-	stkLen := len(er.ctxStack)
-	er.err = expression.CheckArgsNotMultiColumnRow(er.ctxStack[stkLen-3:]...)
-	if er.err != nil {
-		return
-	}
-
-	expr, lexp, rexp := er.wrapExpWithCast()
-
-	var op string
-	var l, r expression.Expression
-	l, er.err = er.newFunction(ast.GE, &v.Type, expr, lexp)
-	if er.err == nil {
-		r, er.err = er.newFunction(ast.LE, &v.Type, expr, rexp)
-	}
-	op = ast.LogicAnd
-	if er.err != nil {
-		return
-	}
-	function, err := er.newFunction(op, &v.Type, l, r)
-	if err != nil {
-		er.err = err
-		return
-	}
-	if v.Not {
-		function, err = er.newFunction(ast.UnaryNot, &v.Type, function)
-		if err != nil {
-			er.err = err
-			return
-		}
-	}
-	er.ctxStackPop(3)
 	er.ctxStackAppend(function, types.EmptyName)
 }
 

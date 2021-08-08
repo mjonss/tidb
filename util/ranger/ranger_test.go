@@ -183,25 +183,25 @@ func (s *testRangerSuite) TestTableRange(c *C) {
 		},
 		{
 			exprStr:     "a between 1 and 2",
-			accessConds: "[ge(test.t.a, 1) le(test.t.a, 2)]",
+			accessConds: "[le(1, test.t.a) le(test.t.a, 2)]",
 			filterConds: "[]",
 			resultStr:   "[[1,2]]",
 		},
 		{
 			exprStr:     "a not between 1 and 2",
-			accessConds: "[or(lt(test.t.a, 1), gt(test.t.a, 2))]",
+			accessConds: "[or(gt(1, test.t.a), gt(test.t.a, 2))]",
 			filterConds: "[]",
 			resultStr:   "[[-inf,1) (2,+inf]]",
 		},
 		{
 			exprStr:     "a between 2 and 1",
-			accessConds: "[ge(test.t.a, 2) le(test.t.a, 1)]",
+			accessConds: "[le(2, test.t.a) le(test.t.a, 1)]",
 			filterConds: "[]",
 			resultStr:   "[]",
 		},
 		{
 			exprStr:     "a not between 2 and 1",
-			accessConds: "[or(lt(test.t.a, 2), gt(test.t.a, 1))]",
+			accessConds: "[or(gt(2, test.t.a), gt(test.t.a, 1))]",
 			filterConds: "[]",
 			resultStr:   "[[-inf,+inf]]",
 		},
@@ -1030,7 +1030,7 @@ func (s *testRangerSuite) TestColumnRange(c *C) {
 		{
 			colPos:      0,
 			exprStr:     "a between 1 and 2",
-			accessConds: "[ge(test.t.a, 1) le(test.t.a, 2)]",
+			accessConds: "[le(1, test.t.a) le(test.t.a, 2)]",
 			filterConds: "[]",
 			resultStr:   "[[1,2]]",
 			length:      types.UnspecifiedLength,
@@ -1038,7 +1038,7 @@ func (s *testRangerSuite) TestColumnRange(c *C) {
 		{
 			colPos:      0,
 			exprStr:     "a not between 1 and 2",
-			accessConds: "[or(lt(test.t.a, 1), gt(test.t.a, 2))]",
+			accessConds: "[or(gt(1, test.t.a), gt(test.t.a, 2))]",
 			filterConds: "[]",
 			resultStr:   "[[-inf,1) (2,+inf]]",
 			length:      types.UnspecifiedLength,
@@ -1051,7 +1051,7 @@ func (s *testRangerSuite) TestColumnRange(c *C) {
 		{
 			colPos:      0,
 			exprStr:     "a between 2 and 1",
-			accessConds: "[ge(test.t.a, 2) le(test.t.a, 1)]",
+			accessConds: "[le(2, test.t.a) le(test.t.a, 1)]",
 			filterConds: "[]",
 			resultStr:   "[]",
 			length:      types.UnspecifiedLength,
@@ -1059,7 +1059,7 @@ func (s *testRangerSuite) TestColumnRange(c *C) {
 		{
 			colPos:      0,
 			exprStr:     "a not between 2 and 1",
-			accessConds: "[or(lt(test.t.a, 2), gt(test.t.a, 1))]",
+			accessConds: "[or(gt(2, test.t.a), gt(test.t.a, 1))]",
 			filterConds: "[]",
 			resultStr:   "[[-inf,+inf]]",
 			length:      types.UnspecifiedLength,
