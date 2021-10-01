@@ -5734,7 +5734,6 @@ func (b *builtinConvertTzSig) convertTz(dt types.Time, fromTzStr, toTzStr string
 			return types.ZeroTime, true, nil
 		}
 		t = t.Add(-timeZone2Duration(fromTzStr))
-		logutil.BgLogger().Info("convertTZ", zap.Time("fromTz", t))
 	} else {
 		fromTz, err := time.LoadLocation(fromTzStr)
 		if err != nil {
@@ -5744,19 +5743,18 @@ func (b *builtinConvertTzSig) convertTz(dt types.Time, fromTzStr, toTzStr string
 		if err != nil {
 			return types.ZeroTime, true, nil
 		}
-		logutil.BgLogger().Info("convertTZ", zap.Time("!fromTz", t))
 	}
 
 	if toTzMatched {
 		return types.NewTime(types.FromGoTime(t.Add(timeZone2Duration(toTzStr))),
 			mysql.TypeDatetime, int8(b.tp.Decimal)), false, nil
-	} else {
-		toTz, err := time.LoadLocation(toTzStr)
-		if err != nil {
-			return types.ZeroTime, true, nil
-		}
-		return types.NewTime(types.FromGoTime(t.In(toTz)), mysql.TypeDatetime, int8(b.tp.Decimal)), false, nil
 	}
+
+	toTz, err := time.LoadLocation(toTzStr)
+	if err != nil {
+		return types.ZeroTime, true, nil
+	}
+	return types.NewTime(types.FromGoTime(t.In(toTz)), mysql.TypeDatetime, int8(b.tp.Decimal)), false, nil
 }
 
 type makeDateFunctionClass struct {
