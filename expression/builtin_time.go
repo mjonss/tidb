@@ -5666,7 +5666,7 @@ func (c *convertTzFunctionClass) getFunction(ctx sessionctx.Context, args []Expr
 		return nil, err
 	}
 	// tzRegex holds the regex to check whether a string is a time zone.
-	tzRegex, err := regexp.Compile(`(^(\+|-)(0?[0-9]|1[0-2]):[0-5]?\d$)|(^\+13:00$)`)
+	tzRegex, err := regexp.Compile(`(^(\+|-)(0?[0-9]|1[0-2]):[0-5]?\d$)|(^\+1[3-4]:00$)`)
 	if err != nil {
 		return nil, err
 	}
@@ -5749,7 +5749,42 @@ func (b *builtinConvertTzSig) convertTz(dt types.Time, fromTzStr, toTzStr string
 			return types.ZeroTime, true, nil
 		}
 
-		return types.NewTime(types.FromGoTime(t.Add(timeZone2Duration(toTzStr)-timeZone2Duration(fromTzStr))), mysql.TypeDatetime, int8(b.tp.Decimal)), false, nil
+		return types.NewTime(types.FromGoTime(t.Add(timeZone2Duration(toTzStr)-timeZone2Duration(fromTzStr))),
+			mysql.TypeDatetime, int8(b.tp.Decimal)), false, nil
+	}
+	if fromTzMatched && !toTzMatched {
+		t, err := dt.GoTime(time.UTC)
+		if err != nil {
+			return types.ZeroTime, true, nil
+		}
+
+		toTz, err := time.LoadLocation(toTzStr)
+		if err != nil {
+			return types.ZeroTime, true, nil
+		}
+
+		_, toOffsetSec := t.In(toTz).Zone()
+		toOffset := time.Duration(toOffsetSec) * time.Second
+
+		return types.NewTime(types.FromGoTime(t.Add(toOffset-timeZone2Duration(fromTzStr))),
+			mysql.TypeDatetime, int8(b.tp.Decimal)), false, nil
+	}
+	if !fromTzMatched && toTzMatched {
+		t, err := dt.GoTime(time.UTC)
+		if err != nil {
+			return types.ZeroTime, true, nil
+		}
+
+		fromTz, err := time.LoadLocation(fromTzStr)
+		if err != nil {
+			return types.ZeroTime, true, nil
+		}
+
+		_, fromOffsetSec := t.In(fromTz).Zone()
+		fromOffset := time.Duration(fromOffsetSec) * time.Second
+
+		return types.NewTime(types.FromGoTime(t.Add(timeZone2Duration(toTzStr)-fromOffset)),
+			mysql.TypeDatetime, int8(b.tp.Decimal)), false, nil
 	}
 	return types.ZeroTime, true, nil
 }
