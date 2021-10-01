@@ -5725,68 +5725,38 @@ func (b *builtinConvertTzSig) convertTz(dt types.Time, fromTzStr, toTzStr string
 	fromTzMatched := b.timezoneRegex.MatchString(fromTzStr)
 	toTzMatched := b.timezoneRegex.MatchString(toTzStr)
 
-	if !fromTzMatched && !toTzMatched {
+	var t time.Time
+	var err error
+
+	if fromTzMatched {
+		t, err = dt.GoTime(time.UTC)
+		if err != nil {
+			return types.ZeroTime, true, nil
+		}
+		t = t.Add(-timeZone2Duration(fromTzStr))
+		logutil.BgLogger().Info("convertTZ", zap.Time("fromTz", t))
+	} else {
 		fromTz, err := time.LoadLocation(fromTzStr)
 		if err != nil {
 			return types.ZeroTime, true, nil
 		}
+		t, err = dt.GoTime(fromTz)
+		if err != nil {
+			return types.ZeroTime, true, nil
+		}
+		logutil.BgLogger().Info("convertTZ", zap.Time("!fromTz", t))
+	}
 
+	if toTzMatched {
+		return types.NewTime(types.FromGoTime(t.Add(timeZone2Duration(toTzStr))),
+			mysql.TypeDatetime, int8(b.tp.Decimal)), false, nil
+	} else {
 		toTz, err := time.LoadLocation(toTzStr)
 		if err != nil {
 			return types.ZeroTime, true, nil
 		}
-
-		t, err := dt.GoTime(fromTz)
-		if err != nil {
-			return types.ZeroTime, true, nil
-		}
-
 		return types.NewTime(types.FromGoTime(t.In(toTz)), mysql.TypeDatetime, int8(b.tp.Decimal)), false, nil
 	}
-	if fromTzMatched && toTzMatched {
-		t, err := dt.GoTime(time.Local)
-		if err != nil {
-			return types.ZeroTime, true, nil
-		}
-
-		return types.NewTime(types.FromGoTime(t.Add(timeZone2Duration(toTzStr)-timeZone2Duration(fromTzStr))),
-			mysql.TypeDatetime, int8(b.tp.Decimal)), false, nil
-	}
-	if fromTzMatched && !toTzMatched {
-		t, err := dt.GoTime(time.UTC)
-		if err != nil {
-			return types.ZeroTime, true, nil
-		}
-
-		toTz, err := time.LoadLocation(toTzStr)
-		if err != nil {
-			return types.ZeroTime, true, nil
-		}
-
-		_, toOffsetSec := t.In(toTz).Zone()
-		toOffset := time.Duration(toOffsetSec) * time.Second
-
-		return types.NewTime(types.FromGoTime(t.Add(toOffset-timeZone2Duration(fromTzStr))),
-			mysql.TypeDatetime, int8(b.tp.Decimal)), false, nil
-	}
-	if !fromTzMatched && toTzMatched {
-		t, err := dt.GoTime(time.UTC)
-		if err != nil {
-			return types.ZeroTime, true, nil
-		}
-
-		fromTz, err := time.LoadLocation(fromTzStr)
-		if err != nil {
-			return types.ZeroTime, true, nil
-		}
-
-		_, fromOffsetSec := t.In(fromTz).Zone()
-		fromOffset := time.Duration(fromOffsetSec) * time.Second
-
-		return types.NewTime(types.FromGoTime(t.Add(timeZone2Duration(toTzStr)-fromOffset)),
-			mysql.TypeDatetime, int8(b.tp.Decimal)), false, nil
-	}
-	return types.ZeroTime, true, nil
 }
 
 type makeDateFunctionClass struct {
