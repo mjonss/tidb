@@ -2671,6 +2671,11 @@ func (s *testEvaluatorSuite) TestConvertTz(c *C) {
 		{"2021-10-31 02:30:00", "+02:00", "Europe/Amsterdam", true, "2021-10-31 02:30:00"},
 		{"2021-10-31 02:30:00", "+01:00", "Europe/Amsterdam", true, "2021-10-31 02:30:00"},
 		{"2021-03-28 02:30:00", "Europe/Amsterdam", "UTC", true, ""},
+		{"2021-10-31 02:00:00", "Europe/Amsterdam", "+02:00", true, "2021-10-31 02:00:00"},
+		{"2021-10-31 02:59:59", "Europe/Amsterdam", "+02:00", true, "2021-10-31 02:59:59"},
+		{"2021-10-31 03:00:00", "Europe/Amsterdam", "+01:00", true, "2021-10-31 03:00:00"},
+		{"2021-10-31 02:59:59", "+02:00", "Europe/Amsterdam", true, "2021-10-31 02:59:59"},
+		{"2021-10-31 03:00:00", "+01:00", "Europe/Amsterdam", true, "2021-10-31 03:00:00"},
 	}
 	fc := funcs[ast.ConvertTz]
 	for _, test := range tests {
