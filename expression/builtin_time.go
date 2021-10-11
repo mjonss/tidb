@@ -5743,6 +5743,7 @@ func (b *builtinConvertTzSig) convertTz(dt types.Time, fromTzStr, toTzStr string
 		if err != nil {
 			return types.ZeroTime, true, nil
 		}
+		t = t.In(time.UTC)
 	}
 
 	if toTzMatched {
