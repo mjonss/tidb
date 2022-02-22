@@ -3202,6 +3202,36 @@ PARTITION BY RANGE (a) (
 	verifyPartitionResult(tk, input, output)
 }
 
+func TestIssue32516(t *testing.T) {
+	store, clean := testkit.CreateMockStore(t)
+	defer clean()
+
+	tk := testkit.NewTestKit(t, store)
+	//tk.MustExec("set @@tidb_partition_prune_mode = 'static'")
+	tk.MustExec("set @@tidb_partition_prune_mode = 'dynamic'")
+	tk.MustExec("use test")
+	tk.MustExec("create table issue32516 (id int, a int, key(a)) PARTITION BY HASH(id) PARTITIONS 3")
+	defer tk.MustExec("drop table issue32516")
+	tk.MustExec("insert into issue32516 values (1,1),(2,2),(3,3),(4,4),(5,5),(6,6),(7,7),(8,8),(9,9),(10,10),(11,11),(12,12),(13,13),(14,14),(15,15),(16,16)")
+	//tk.MustQuery("select count(*) from (select * from issue32516 where a between 1 and 16 LIMIT 2) as t").Check(testkit.Rows("2"))
+	tk.MustQuery("explain format = 'brief' select count(*) from (select * from issue32516 where a between 1 and 16 LIMIT 2) as t").Check(testkit.Rows(
+		"StreamAgg 1.00 root  funcs:count(1)->Column#4",
+		"└─Limit 2.00 root  offset:0, count:2",
+		"  └─TableReader 2.00 root partition:all data:Limit",
+		"    └─Limit 2.00 cop[tikv]  offset:0, count:2",
+		"      └─Selection 2.00 cop[tikv]  ge(test.issue32516.a, 1), le(test.issue32516.a, 16)",
+		"        └─TableFullScan 80.00 cop[tikv] table:issue32516 keep order:false, stats:pseudo"))
+	tk.MustExec("drop table issue32516")
+	tk.MustExec("create table issue32516 (id int, a int) PARTITION BY RANGE(id)" +
+		"(PARTITION p1 VALUES LESS THAN (4)," +
+		"PARTITION p2 VALUES LESS THAN (8)," +
+		"PARTITION p3 VALUES LESS THAN (12)," +
+		"PARTITION p4 VALUES LESS THAN (MAXVALUE))")
+	tk.MustExec("insert into issue32516 values (1,1),(2,2),(3,3),(4,4),(5,5),(6,6),(7,7),(8,8),(9,9),(10,10),(11,11),(12,12),(13,13),(14,14),(15,15),(16,16)")
+	tk.MustQuery("select count(*) from (select * from issue32516 where a between 1 and 16 LIMIT 2) as t").Check(testkit.Rows("2"))
+	tk.MustQuery("explain format = 'brief' select count(*) from (select * from issue32516 where a between 1 and 16 LIMIT 2) as t").Check(testkit.Rows("KALLE"))
+}
+
 func TestIssue25528(t *testing.T) {
 	store, clean := testkit.CreateMockStore(t)
 	defer clean()
