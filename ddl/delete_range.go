@@ -307,11 +307,16 @@ func insertJobIntoDeleteRangeTable(ctx context.Context, sctx sessionctx.Context,
 		endKey := tablecodec.EncodeTablePrefix(tableID + 1)
 		elemID := ea.allocForPhysicalID(tableID)
 		return doInsert(ctx, s, job.ID, elemID, startKey, endKey, now, fmt.Sprintf("table ID is %d", tableID))
-	case model.ActionDropTablePartition, model.ActionTruncateTablePartition:
+	case model.ActionDropTablePartition, model.ActionTruncateTablePartition,
+		model.ActionReorganizePartition:
 		var physicalTableIDs []int64
-		if err := job.DecodeArgs(&physicalTableIDs); err != nil {
+		// ActionReorganizePartition has two arguments, extra arguments to DecodeArgs
+		// are ignored, but too few will truncate the job arguments!
+		var partInfo model.PartitionInfo
+		if err := job.DecodeArgs(&physicalTableIDs, &partInfo); err != nil {
 			return errors.Trace(err)
 		}
+		// TODO: investigate if beneficial to use doBatchInsert instead?
 		for _, physicalTableID := range physicalTableIDs {
 			startKey := tablecodec.EncodeTablePrefix(physicalTableID)
 			endKey := tablecodec.EncodeTablePrefix(physicalTableID + 1)
