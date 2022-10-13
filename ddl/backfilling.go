@@ -622,9 +622,6 @@ func (dc *ddlCtx) writePhysicalTableRecord(sessPool *sessionPool, t table.Physic
 	jc := dc.jobContext(job)
 
 	for {
-		// TODO: Also give batch size (workerCnt+1), to limit the search,
-		// instead of getting all the rest of the ranges for each loop iteration
-		// Note: the +1 is needed for getting the new startKey...
 		kvRanges, err := splitTableRanges(t, reorgInfo.d.store, startKey, endKey)
 		if err != nil {
 			return errors.Trace(err)
