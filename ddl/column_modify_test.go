@@ -1150,3 +1150,74 @@ func TestModifyColDeleteReorg(t *testing.T) {
 		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"))
 	newTbl.Meta().Columns = newCols
 }
+
+func TestModifyColIntToVarcharIssue(t *testing.T) {
+	store := testkit.CreateMockStore(t)
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("use test")
+	tk.MustExec(`create table t (a int unsigned PRIMARY KEY, b int, c int, key (b), key (c,b))`)
+	tk.MustExec(`insert into t values (1,1,1)`)
+
+	dom := domain.GetDomain(tk.Session())
+	originHook := dom.DDL().GetHook()
+	defer dom.DDL().SetHook(originHook)
+	hook := &ddl.TestDDLCallback{Do: dom}
+	dom.DDL().SetHook(hook)
+
+	wait := make(chan bool)
+	defer close(wait)
+
+	hookEnabled := true
+
+	hook.OnJobRunBeforeExported = func(job *model.Job) {
+		if job.Type == model.ActionModifyColumn &&
+			job.SchemaState == model.StateWriteReorganization &&
+			hookEnabled {
+			//currState = job.SchemaState
+			<-wait
+			<-wait
+		}
+	}
+
+	alterErr := make(chan error, 1)
+	go backgroundExec(store, "alter table t modify column b varchar(10)", alterErr)
+
+	wait <- true
+	oldInfoSchema := sessiontxn.GetTxnManager(tk.Session()).GetTxnInfoSchema()
+	hookEnabled = false
+	wait <- true
+	require.NoError(t, <-alterErr)
+
+	tk.MustExec(`insert into t values (2,"Hi",2)`)
+	newInfoSchema := sessiontxn.GetTxnManager(tk.Session()).GetTxnInfoSchema()
+	// There seems to be yet another schema update somewhere, not sure where...
+	require.Equal(t, int64(2), newInfoSchema.SchemaMetaVersion()-oldInfoSchema.SchemaMetaVersion())
+	oldTbl, err := oldInfoSchema.TableByName(model.NewCIStr("test"), model.NewCIStr("t"))
+	require.NoError(t, err)
+	tk.MustQuery(`show create table t`).Check(testkit.Rows("" +
+		"t CREATE TABLE `t` (\n" +
+		"  `a` int(10) unsigned NOT NULL,\n" +
+		"  `b` varchar(10) DEFAULT NULL,\n" +
+		"  `c` int(11) DEFAULT NULL,\n" +
+		"  PRIMARY KEY (`a`) /*T![clustered_index] CLUSTERED */,\n" +
+		"  KEY `b` (`b`),\n" +
+		"  KEY `c` (`c`,`b`)\n" +
+		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"))
+	newTbl, err := newInfoSchema.TableByName(model.NewCIStr("test"), model.NewCIStr("t"))
+	require.NoError(t, err)
+	newCols := newTbl.Meta().Columns
+	newTbl.Meta().Columns = oldTbl.Meta().Columns
+	tk.MustQuery(`select * from t`).Sort().Check(testkit.Rows(""+
+		"1 1 1",
+		"2 Hi 2"))
+	tk.MustQuery(`show create table t`).Check(testkit.Rows("" +
+		"t CREATE TABLE `t` (\n" +
+		"  `a` int(10) unsigned NOT NULL,\n" +
+		"  `b` int(11) DEFAULT NULL,\n" +
+		"  `c` int(11) DEFAULT NULL,\n" +
+		"  PRIMARY KEY (`a`) /*T![clustered_index] CLUSTERED */,\n" +
+		"  KEY `b` (`b`),\n" +
+		"  KEY `c` (`c`,`b`)\n" +
+		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"))
+	newTbl.Meta().Columns = newCols
+}
