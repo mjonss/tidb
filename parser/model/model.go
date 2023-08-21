@@ -1409,6 +1409,25 @@ const (
 
 //revive:enable:exported
 
+type GlobalIndexType int8
+
+func (t GlobalIndexType) String() string {
+	switch t {
+	case GlobalIndexTypeGlobal:
+		return "GLOBAL"
+	case GlobalIndexTypeLocal:
+		return "LOCAL"
+	default:
+		return ""
+	}
+}
+
+const (
+	GlobalIndexTypeNone GlobalIndexType = iota
+	GlobalIndexTypeGlobal
+	GlobalIndexTypeLocal
+)
+
 // IndexType is the type of index
 type IndexType int
 

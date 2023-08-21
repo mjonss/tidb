@@ -32,6 +32,8 @@ const (
 	FeatureIDTTL = "ttl"
 	// FeatureIDResourceGroup is the `resource group` feature.
 	FeatureIDResourceGroup = "resource_group"
+	// FeatureIDGlobalIndex
+	FeatureIDGlobalIndex = "global_index"
 )
 
 var featureIDs = map[string]struct{}{
@@ -40,6 +42,7 @@ var featureIDs = map[string]struct{}{
 	FeatureIDAutoRandomBase: {},
 	FeatureIDClusteredIndex: {},
 	FeatureIDForceAutoInc:   {},
+	FeatureIDGlobalIndex:    {},
 	FeatureIDPlacement:      {},
 	FeatureIDTTL:            {},
 }

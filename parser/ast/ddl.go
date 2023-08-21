@@ -702,23 +702,35 @@ const (
 //	| index_type
 //	| WITH PARSER parser_name
 //	| COMMENT 'string'
+//	| {GLOBAL|LOCAL} // TiDB extension for GLOBAL INDEX
 //
 // See http://dev.mysql.com/doc/refman/5.7/en/create-table.html
 type IndexOption struct {
 	node
 
-	KeyBlockSize uint64
-	Tp           model.IndexType
-	Comment      string
-	ParserName   model.CIStr
-	Visibility   IndexVisibility
-	PrimaryKeyTp model.PrimaryKeyType
+	KeyBlockSize  uint64
+	Tp            model.IndexType
+	Comment       string
+	ParserName    model.CIStr
+	Visibility    IndexVisibility
+	PrimaryKeyTp  model.PrimaryKeyType
+	GlobalIndexTp model.GlobalIndexType
 }
 
 // Restore implements Node interface.
 func (n *IndexOption) Restore(ctx *format.RestoreCtx) error {
 	hasPrevOption := false
+	if n.GlobalIndexTp != model.GlobalIndexTypeNone {
+		_ = ctx.WriteWithSpecialComments(tidb.FeatureIDGlobalIndex, func() error {
+			ctx.WriteKeyWord(n.GlobalIndexTp.String())
+			return nil
+		})
+		hasPrevOption = true
+	}
 	if n.PrimaryKeyTp != model.PrimaryKeyTypeDefault {
+		if hasPrevOption {
+			ctx.WritePlain(" ")
+		}
 		_ = ctx.WriteWithSpecialComments(tidb.FeatureIDClusteredIndex, func() error {
 			ctx.WriteKeyWord(n.PrimaryKeyTp.String())
 			return nil

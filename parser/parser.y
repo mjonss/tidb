@@ -1152,6 +1152,7 @@ import (
 	FirstAndLastPartOpt                    "First and Last partition option"
 	FuncDatetimePrec                       "Function datetime precision"
 	GetFormatSelector                      "{DATE|DATETIME|TIME|TIMESTAMP}"
+	GlobalOrLocal                          "{GLOBAL|LOCAL}"
 	GlobalScope                            "The scope of variable"
 	StatementScope                         "The scope of statement"
 	GroupByClause                          "GROUP BY clause"
@@ -2795,6 +2796,16 @@ KeyOrIndex:
 KeyOrIndexOpt:
 	{}
 |	KeyOrIndex
+
+GlobalOrLocal:
+	"GLOBAL"
+	{
+		$$ = model.GlobalIndexTypeGlobal
+	}
+|	"LOCAL"
+	{
+		$$ = model.GlobalIndexTypeLocal
+	}
 
 ColumnKeywordOpt:
 	/* empty */ %prec empty
@@ -6375,6 +6386,8 @@ IndexOptionList:
 				opt1.Visibility = opt2.Visibility
 			} else if opt2.PrimaryKeyTp != model.PrimaryKeyTypeDefault {
 				opt1.PrimaryKeyTp = opt2.PrimaryKeyTp
+			} else if opt2.GlobalIndexTp != model.GlobalIndexTypeNone {
+				opt1.GlobalIndexTp = opt2.GlobalIndexTp
 			}
 			$$ = opt1
 		}
@@ -6417,6 +6430,12 @@ IndexOption:
 	{
 		$$ = &ast.IndexOption{
 			PrimaryKeyTp: $1.(model.PrimaryKeyType),
+		}
+	}
+|	GlobalOrLocal
+	{
+		$$ = &ast.IndexOption{
+			GlobalIndexTp: $1.(model.GlobalIndexType),
 		}
 	}
 
@@ -15960,5 +15979,4 @@ DropQueryWatchStmt:
 			IntValue: $4.(int64),
 		}
 	}
-
 %%
