@@ -118,76 +118,76 @@ var DialectBinaryFormatMap = map[CSVDialect]BinaryFormat{
 
 // Config is the dump config for dumpling
 type Config struct {
-	storage.BackendOptions
+	storage.BackendOptions `toml:",inline"`
 
-	SpecifiedTables          bool
-	AllowCleartextPasswords  bool
-	SortByPk                 bool
-	NoViews                  bool
-	NoSequences              bool
-	NoHeader                 bool
-	NoSchemas                bool
-	NoData                   bool
-	CompleteInsert           bool
-	TransactionalConsistency bool
-	EscapeBackslash          bool
-	DumpEmptyDatabase        bool
-	PosAfterConnect          bool
-	CompressType             storage.CompressType
+	specifiedTables          bool
+	AllowCleartextPasswords  bool                 `toml:"allow-cleartext-passwords"`
+	SortByPk                 bool                 `toml:"order-by-primary-key"`
+	NoViews                  bool                 `toml:"no-views"`
+	NoSequences              bool                 `toml:"no-sequences"`
+	NoHeader                 bool                 `toml:"no-header"`
+	NoSchemas                bool                 `toml:"no-schemas"`
+	NoData                   bool                 `toml:"no-data"`
+	CompleteInsert           bool                 `toml:"complete-insert"`
+	TransactionalConsistency bool                 `toml:"transactional-consistency"`
+	EscapeBackslash          bool                 `toml:"escape-backslash"`
+	DumpEmptyDatabase        bool                 `toml:"dump-empty-database"`
+	PosAfterConnect          bool                 `toml:"pos-after-connect"`
+	CompressType             storage.CompressType `toml:"compress"`
 
-	Host     string
-	Port     int
-	Threads  int
-	User     string
-	Password string `json:"-"`
+	Host     string `toml:"host"`
+	Port     int    `toml:"port"`
+	Threads  int    `toml:"threads"`
+	User     string `toml:"user"`
+	Password string `toml:"password" json:"-"`
 	Security struct {
-		TLS          *tls.Config `json:"-"`
-		CAPath       string
-		CertPath     string
-		KeyPath      string
-		SSLCABytes   []byte `json:"-"`
-		SSLCertBytes []byte `json:"-"`
-		SSLKeyBytes  []byte `json:"-"`
-	}
+		TLS          *tls.Config `toml:"-" json:"-"`
+		CAPath       string      `toml:"ca"`
+		CertPath     string      `toml:"cert"`
+		KeyPath      string      `toml:"key"`
+		SSLCABytes   []byte      `toml:"-" json:"-"`
+		SSLCertBytes []byte      `toml:"-" json:"-"`
+		SSLKeyBytes  []byte      `toml:"-" json:"-"`
+	} `toml:"security"`
 
-	LogLevel          string
-	LogFile           string
-	LogFormat         string
-	OutputDirPath     string
-	StatusAddr        string
-	Snapshot          string
-	Consistency       string
-	CsvNullValue      string
-	SQL               string
-	CsvSeparator      string
-	CsvDelimiter      string
-	CsvLineTerminator string
-	Databases         []string
+	LogLevel          string   `toml:"loglevel"`
+	LogFile           string   `toml:"logfile"`
+	LogFormat         string   `toml:"logfmt"`
+	OutputDirPath     string   `toml:"output"`
+	StatusAddr        string   `toml:"status-addr"`
+	Snapshot          string   `toml:"snapshot"`
+	Consistency       string   `toml:"consistency"`
+	CsvNullValue      string   `toml:"csv-null-value"`
+	SQL               string   `toml:"sql"`
+	CsvSeparator      string   `toml:"csv-separator"`
+	CsvDelimiter      string   `toml:"csv-delimiter"`
+	CsvLineTerminator string   `toml:"csv-line-terminator"`
+	Databases         []string `toml:"database"`
 
-	TableFilter         filter.Filter `json:"-"`
-	Where               string
-	FileType            string
-	ServerInfo          version.ServerInfo
-	Logger              *zap.Logger        `json:"-"`
-	OutputFileTemplate  *template.Template `json:"-"`
-	Rows                uint64
-	ReadTimeout         time.Duration
-	TiDBMemQuotaQuery   uint64
-	FileSize            uint64
-	StatementSize       uint64
-	SessionParams       map[string]any
-	Tables              DatabaseTables
-	CollationCompatible string
-	CsvOutputDialect    CSVDialect
+	TableFilter         filter.Filter      `toml:"-" json:"-"`
+	Where               string             `toml:"where"`
+	FileType            string             `toml:"filetype"`
+	ServerInfo          version.ServerInfo `toml:"server-info"`
+	Logger              *zap.Logger        `toml:"-" json:"-"`
+	OutputFileTemplate  *template.Template `toml:"-" json:"-"`
+	Rows                uint64             `toml:"rows"`
+	ReadTimeout         time.Duration      `toml:"read-timeout"`
+	TiDBMemQuotaQuery   uint64             `toml:"tidb-mem-quota-query"`
+	FileSize            uint64             `toml:"filesize"`
+	StatementSize       uint64             `toml:"statement-size"`
+	SessionParams       map[string]any     `toml:"params"`
+	Tables              DatabaseTables     `toml:"tables-list"`
+	CollationCompatible string             `toml:"collation-compatible"`
+	CsvOutputDialect    CSVDialect         `toml:"csv-output-dialect"`
 
-	Labels        prometheus.Labels       `json:"-"`
-	PromFactory   promutil.Factory        `json:"-"`
-	PromRegistry  promutil.Registry       `json:"-"`
-	ExtStorage    storage.ExternalStorage `json:"-"`
-	MinTLSVersion uint16                  `json:"-"`
+	Labels        prometheus.Labels       `toml:"-" json:"-"`
+	PromFactory   promutil.Factory        `toml:"-" json:"-"`
+	PromRegistry  promutil.Registry       `toml:"-" json:"-"`
+	ExtStorage    storage.ExternalStorage `toml:"-" json:"-"`
+	MinTLSVersion uint16                  `toml:"min-tls-version" json:"-"`
 
-	IOTotalBytes *atomic.Uint64
-	Net          string
+	IOTotalBytes *atomic.Uint64 `toml:"-"`
+	Net          string         `toml:"net"`
 }
 
 // ServerInfoUnknown is the unknown database type to dumpling
@@ -237,7 +237,7 @@ func DefaultConfig() *Config {
 		PosAfterConnect:          false,
 		CollationCompatible:      LooseCollationCompatible,
 		CsvOutputDialect:         CSVDialectDefault,
-		SpecifiedTables:          false,
+		specifiedTables:          false,
 		PromFactory:              promutil.NewDefaultFactory(),
 		PromRegistry:             promutil.NewDefaultRegistry(),
 		TransactionalConsistency: true,
@@ -360,160 +360,237 @@ func (*Config) DefineFlags(flags *pflag.FlagSet) {
 }
 
 // ParseFromFlags parses dumpling's export.Config from flags
+// and only sets the given config from given flags!
 // nolint: gocyclo
 func (conf *Config) ParseFromFlags(flags *pflag.FlagSet) error {
 	var err error
-	conf.Databases, err = flags.GetStringSlice(flagDatabase)
-	if err != nil {
-		return errors.Trace(err)
+	if flags.Changed(flagDatabase) {
+		conf.Databases, err = flags.GetStringSlice(flagDatabase)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
-	conf.Host, err = flags.GetString(flagHost)
-	if err != nil {
-		return errors.Trace(err)
+	if flags.Changed(flagHost) {
+		conf.Host, err = flags.GetString(flagHost)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
-	conf.User, err = flags.GetString(flagUser)
-	if err != nil {
-		return errors.Trace(err)
+	if flags.Changed(flagUser) {
+		conf.User, err = flags.GetString(flagUser)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
-	conf.Port, err = flags.GetInt(flagPort)
-	if err != nil {
-		return errors.Trace(err)
+	if flags.Changed(flagPort) {
+		conf.Port, err = flags.GetInt(flagPort)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
-	conf.Password, err = flags.GetString(flagPassword)
-	if err != nil {
-		return errors.Trace(err)
+	if flags.Changed(flagPassword) {
+		conf.Password, err = flags.GetString(flagPassword)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
-	conf.AllowCleartextPasswords, err = flags.GetBool(flagAllowCleartextPasswords)
-	if err != nil {
-		return errors.Trace(err)
+	if flags.Changed(flagAllowCleartextPasswords) {
+		conf.AllowCleartextPasswords, err = flags.GetBool(flagAllowCleartextPasswords)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
-	conf.Threads, err = flags.GetInt(flagThreads)
-	if err != nil {
-		return errors.Trace(err)
+	if flags.Changed(flagThreads) {
+		conf.Threads, err = flags.GetInt(flagThreads)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
-	conf.StatementSize, err = flags.GetUint64(flagStatementSize)
-	if err != nil {
-		return errors.Trace(err)
+	if flags.Changed(flagStatementSize) {
+		conf.StatementSize, err = flags.GetUint64(flagStatementSize)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
-	conf.OutputDirPath, err = flags.GetString(flagOutput)
-	if err != nil {
-		return errors.Trace(err)
+	if flags.Changed(flagOutput) {
+		conf.OutputDirPath, err = flags.GetString(flagOutput)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
-	conf.LogLevel, err = flags.GetString(flagLoglevel)
-	if err != nil {
-		return errors.Trace(err)
+	if flags.Changed(flagLoglevel) {
+		conf.LogLevel, err = flags.GetString(flagLoglevel)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
-	conf.LogFile, err = flags.GetString(flagLogfile)
-	if err != nil {
-		return errors.Trace(err)
+	if flags.Changed(flagLogfile) {
+		conf.LogFile, err = flags.GetString(flagLogfile)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
-	conf.LogFormat, err = flags.GetString(flagLogfmt)
-	if err != nil {
-		return errors.Trace(err)
+	if flags.Changed(flagLogfmt) {
+		conf.LogFormat, err = flags.GetString(flagLogfmt)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
-	conf.Consistency, err = flags.GetString(flagConsistency)
-	if err != nil {
-		return errors.Trace(err)
+	if flags.Changed(flagConsistency) {
+		conf.Consistency, err = flags.GetString(flagConsistency)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
-	conf.Snapshot, err = flags.GetString(flagSnapshot)
-	if err != nil {
-		return errors.Trace(err)
+	if flags.Changed(flagSnapshot) {
+		conf.Snapshot, err = flags.GetString(flagSnapshot)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
-	conf.NoViews, err = flags.GetBool(flagNoViews)
-	if err != nil {
-		return errors.Trace(err)
+	if flags.Changed(flagNoViews) {
+		conf.NoViews, err = flags.GetBool(flagNoViews)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
-	conf.NoSequences, err = flags.GetBool(flagNoSequences)
-	if err != nil {
-		return errors.Trace(err)
+	if flags.Changed(flagNoSequences) {
+		conf.NoSequences, err = flags.GetBool(flagNoSequences)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
-	conf.SortByPk, err = flags.GetBool(flagSortByPk)
-	if err != nil {
-		return errors.Trace(err)
+	if flags.Changed(flagSortByPk) {
+		conf.SortByPk, err = flags.GetBool(flagSortByPk)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
-	conf.StatusAddr, err = flags.GetString(flagStatusAddr)
-	if err != nil {
-		return errors.Trace(err)
+	if flags.Changed(flagStatusAddr) {
+		conf.StatusAddr, err = flags.GetString(flagStatusAddr)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
-	conf.Rows, err = flags.GetUint64(flagRows)
-	if err != nil {
-		return errors.Trace(err)
+	if flags.Changed(flagRows) {
+		conf.Rows, err = flags.GetUint64(flagRows)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
-	conf.Where, err = flags.GetString(flagWhere)
-	if err != nil {
-		return errors.Trace(err)
+	if flags.Changed(flagWhere) {
+		conf.Where, err = flags.GetString(flagWhere)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
-	conf.EscapeBackslash, err = flags.GetBool(flagEscapeBackslash)
-	if err != nil {
-		return errors.Trace(err)
+	if flags.Changed(flagEscapeBackslash) {
+		conf.EscapeBackslash, err = flags.GetBool(flagEscapeBackslash)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
-	conf.FileType, err = flags.GetString(flagFiletype)
-	if err != nil {
-		return errors.Trace(err)
+	if flags.Changed(flagFiletype) {
+		conf.FileType, err = flags.GetString(flagFiletype)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
-	conf.NoHeader, err = flags.GetBool(flagNoHeader)
-	if err != nil {
-		return errors.Trace(err)
+	if flags.Changed(flagNoHeader) {
+		conf.NoHeader, err = flags.GetBool(flagNoHeader)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
-	conf.NoSchemas, err = flags.GetBool(flagNoSchemas)
-	if err != nil {
-		return errors.Trace(err)
+	if flags.Changed(flagNoSchemas) {
+		conf.NoSchemas, err = flags.GetBool(flagNoSchemas)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
-	conf.NoData, err = flags.GetBool(flagNoData)
-	if err != nil {
-		return errors.Trace(err)
+	if flags.Changed(flagNoData) {
+		conf.NoData, err = flags.GetBool(flagNoData)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
-	conf.CsvNullValue, err = flags.GetString(flagCsvNullValue)
-	if err != nil {
-		return errors.Trace(err)
+	if flags.Changed(flagCsvNullValue) {
+		conf.CsvNullValue, err = flags.GetString(flagCsvNullValue)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
-	conf.SQL, err = flags.GetString(flagSQL)
-	if err != nil {
-		return errors.Trace(err)
+	if flags.Changed(flagSQL) {
+		conf.SQL, err = flags.GetString(flagSQL)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
-	conf.DumpEmptyDatabase, err = flags.GetBool(flagDumpEmptyDatabase)
-	if err != nil {
-		return errors.Trace(err)
+	if flags.Changed(flagDumpEmptyDatabase) {
+		conf.DumpEmptyDatabase, err = flags.GetBool(flagDumpEmptyDatabase)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
-	conf.Security.CAPath, err = flags.GetString(flagCA)
-	if err != nil {
-		return errors.Trace(err)
+	if flags.Changed(flagCA) {
+		conf.Security.CAPath, err = flags.GetString(flagCA)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
-	conf.Security.CertPath, err = flags.GetString(flagCert)
-	if err != nil {
-		return errors.Trace(err)
+	if flags.Changed(flagCert) {
+		conf.Security.CertPath, err = flags.GetString(flagCert)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
-	conf.Security.KeyPath, err = flags.GetString(flagKey)
-	if err != nil {
-		return errors.Trace(err)
+	if flags.Changed(flagKey) {
+		conf.Security.KeyPath, err = flags.GetString(flagKey)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
-	conf.CsvSeparator, err = flags.GetString(flagCsvSeparator)
-	if err != nil {
-		return errors.Trace(err)
+	if flags.Changed(flagCsvSeparator) {
+		conf.CsvSeparator, err = flags.GetString(flagCsvSeparator)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
-	conf.CsvDelimiter, err = flags.GetString(flagCsvDelimiter)
-	if err != nil {
-		return errors.Trace(err)
+	if flags.Changed(flagCsvDelimiter) {
+		conf.CsvDelimiter, err = flags.GetString(flagCsvDelimiter)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
-	conf.CsvLineTerminator, err = flags.GetString(flagCsvLineTerminator)
-	if err != nil {
-		return errors.Trace(err)
+	if flags.Changed(flagCsvLineTerminator) {
+		conf.CsvLineTerminator, err = flags.GetString(flagCsvLineTerminator)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
-	conf.CompleteInsert, err = flags.GetBool(flagCompleteInsert)
-	if err != nil {
-		return errors.Trace(err)
+	if flags.Changed(flagCompleteInsert) {
+		conf.CompleteInsert, err = flags.GetBool(flagCompleteInsert)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
-	conf.ReadTimeout, err = flags.GetDuration(flagReadTimeout)
-	if err != nil {
-		return errors.Trace(err)
+	if flags.Changed(flagReadTimeout) {
+		conf.ReadTimeout, err = flags.GetDuration(flagReadTimeout)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
-	conf.TransactionalConsistency, err = flags.GetBool(flagTransactionalConsistency)
-	if err != nil {
-		return errors.Trace(err)
+	if flags.Changed(flagTransactionalConsistency) {
+		conf.TransactionalConsistency, err = flags.GetBool(flagTransactionalConsistency)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
-	conf.TiDBMemQuotaQuery, err = flags.GetUint64(flagTidbMemQuotaQuery)
-	if err != nil {
-		return errors.Trace(err)
+	if flags.Changed(flagTidbMemQuotaQuery) {
+		conf.TiDBMemQuotaQuery, err = flags.GetUint64(flagTidbMemQuotaQuery)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
 
 	if conf.Threads <= 0 {
@@ -527,83 +604,120 @@ func (conf *Config) ParseFromFlags(flags *pflag.FlagSet) error {
 		conf.SessionParams = make(map[string]any)
 	}
 
-	tablesList, err := flags.GetStringSlice(flagTablesList)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	fileSizeStr, err := flags.GetString(flagFilesize)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	filters, err := flags.GetStringSlice(flagFilter)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	caseSensitive, err := flags.GetBool(flagCaseSensitive)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	outputFilenameFormat, err := flags.GetString(flagOutputFilenameTemplate)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	params, err := flags.GetStringToString(flagParams)
-	if err != nil {
-		return errors.Trace(err)
+	var tablesList []string
+	if flags.Changed(flagTablesList) {
+		tablesList, err = flags.GetStringSlice(flagTablesList)
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		conf.specifiedTables = len(tablesList) > 0
+		conf.Tables, err = GetConfTables(tablesList)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
 
-	conf.SpecifiedTables = len(tablesList) > 0
-	conf.Tables, err = GetConfTables(tablesList)
-	if err != nil {
-		return errors.Trace(err)
+	var fileSizeStr string
+	if flags.Changed(flagFilesize) {
+		fileSizeStr, err = flags.GetString(flagFilesize)
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		conf.FileSize, err = ParseFileSize(fileSizeStr)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
 
-	conf.TableFilter, err = ParseTableFilter(tablesList, filters)
-	if err != nil {
-		return errors.Errorf("failed to parse filter: %s", err)
+	if flags.Changed(flagFilter) {
+		var filters []string
+		filters, err = flags.GetStringSlice(flagFilter)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		conf.TableFilter, err = ParseTableFilter(tablesList, filters)
+		if err != nil {
+			return errors.Errorf("failed to parse filter: %s", err)
+		}
 	}
 
-	if !caseSensitive {
-		conf.TableFilter = filter.CaseInsensitive(conf.TableFilter)
+	var caseSensitive bool
+	if flags.Changed(flagCaseSensitive) {
+		caseSensitive, err = flags.GetBool(flagCaseSensitive)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
 
-	conf.FileSize, err = ParseFileSize(fileSizeStr)
-	if err != nil {
-		return errors.Trace(err)
+	// These operations depend on multiple flag values, so we handle them separately
+	if flags.Changed(flagTablesList) || flags.Changed(flagFilter) {
+		tablesList, _ := flags.GetStringSlice(flagTablesList)
+		filters, _ := flags.GetStringSlice(flagFilter)
+
+		conf.TableFilter, err = ParseTableFilter(tablesList, filters)
+		if err != nil {
+			return errors.Errorf("failed to parse filter: %s", err)
+		}
+
+		if flags.Changed(flagCaseSensitive) && !caseSensitive {
+			conf.TableFilter = filter.CaseInsensitive(conf.TableFilter)
+		}
 	}
 
-	if outputFilenameFormat == "" && conf.SQL != "" {
+	var outputFilenameFormat string
+	if flags.Changed(flagOutputFilenameTemplate) {
+		outputFilenameFormat, err = flags.GetString(flagOutputFilenameTemplate)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	} else if conf.SQL != "" {
 		outputFilenameFormat = DefaultAnonymousOutputFileTemplateText
 	}
-	tmpl, err := ParseOutputFileTemplate(outputFilenameFormat)
-	if err != nil {
-		return errors.Errorf("failed to parse output filename template (--output-filename-template '%s')", outputFilenameFormat)
-	}
-	conf.OutputFileTemplate = tmpl
 
-	compressType, err := flags.GetString(flagCompress)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	conf.CompressType, err = ParseCompressType(compressType)
-	if err != nil {
-		return errors.Trace(err)
+	if outputFilenameFormat != "" {
+		tmpl, err := ParseOutputFileTemplate(outputFilenameFormat)
+		if err != nil {
+			return errors.Errorf("failed to parse output filename template (--output-filename-template '%s')", outputFilenameFormat)
+		}
+		conf.OutputFileTemplate = tmpl
 	}
 
-	dialect, err := flags.GetString(flagCsvOutputDialect)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if dialect != "" && conf.FileType != "csv" {
-		return errors.Errorf("%s is only supported when dumping whole table to csv, not compatible with %s", flagCsvOutputDialect, conf.FileType)
-	}
-	conf.CsvOutputDialect, err = ParseOutputDialect(dialect)
-	if err != nil {
-		return errors.Trace(err)
+	if flags.Changed(flagCompress) {
+		compressType, err := flags.GetString(flagCompress)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		conf.CompressType, err = ParseCompressType(compressType)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
 
-	for k, v := range params {
-		conf.SessionParams[k] = v
+	if flags.Changed(flagCsvOutputDialect) {
+		dialect, err := flags.GetString(flagCsvOutputDialect)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if dialect != "" && conf.FileType != "csv" {
+			return errors.Errorf("%s is only supported when dumping whole table to csv, not compatible with %s", flagCsvOutputDialect, conf.FileType)
+		}
+		conf.CsvOutputDialect, err = ParseOutputDialect(dialect)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+
+	if flags.Changed(flagParams) {
+		params, err := flags.GetStringToString(flagParams)
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		for k, v := range params {
+			conf.SessionParams[k] = v
+		}
 	}
 
 	err = conf.BackendOptions.ParseFromFlags(pflag.CommandLine)
