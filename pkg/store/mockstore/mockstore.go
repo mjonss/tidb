@@ -24,7 +24,9 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/keyspacepb"
@@ -344,14 +346,81 @@ func init() {
 	imageFilePath = filepath.Join(os.TempDir(), "tidb-unistore-bootstraped-image"+suffix) + "/"
 }
 
-// ImageAvailable checks whether the store image file is available.
+// ExpectedBootstrapVersion should be set to the current bootstrap version
+// before calling ImageAvailable. When non-zero, ImageAvailable rejects
+// images created with a different version (older or newer).
+var ExpectedBootstrapVersion int64
+
+const versionMarkerFile = "bootstrap_version"
+
+// ImageAvailable checks whether the store image exists and was created
+// with the expected bootstrap version.
 func ImageAvailable() bool {
 	_, err := os.ReadDir(imageFilePath)
 	if err != nil {
 		return false
 	}
 	_, err = os.ReadDir(filepath.Join(imageFilePath, "kv"))
-	return err == nil
+	if err != nil {
+		return false
+	}
+	if ExpectedBootstrapVersion > 0 {
+		data, err := os.ReadFile(filepath.Join(imageFilePath, versionMarkerFile))
+		if err != nil {
+			return false
+		}
+		ver, err := strconv.ParseInt(strings.TrimSpace(string(data)), 10, 64)
+		if err != nil || ver != ExpectedBootstrapVersion {
+			return false
+		}
+	}
+	return true
+}
+
+// WriteImageVersion writes the bootstrap version marker into the image directory.
+func WriteImageVersion(version int64) error {
+	return os.WriteFile(
+		filepath.Join(imageFilePath, versionMarkerFile),
+		[]byte(strconv.FormatInt(version, 10)),
+		0640,
+	)
+}
+
+// RemoveImage removes the current image directory so it can be recreated.
+func RemoveImage() error {
+	return os.RemoveAll(imageFilePath)
+}
+
+// CleanStaleImages removes bootstrap image directories in the temp directory
+// that are older than maxAge, excluding the current checkout's image.
+// This garbage-collects images left behind by deleted worktrees or old checkouts.
+func CleanStaleImages(maxAge time.Duration) {
+	tmpDir := os.TempDir()
+	entries, err := os.ReadDir(tmpDir)
+	if err != nil {
+		return
+	}
+	ownDir := strings.TrimRight(imageFilePath, "/")
+	cutoff := time.Now().Add(-maxAge)
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		if !strings.HasPrefix(entry.Name(), "tidb-unistore-bootstraped-image") {
+			continue
+		}
+		fullPath := filepath.Join(tmpDir, entry.Name())
+		if fullPath == ownDir {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		if info.ModTime().Before(cutoff) {
+			os.RemoveAll(fullPath)
+		}
+	}
 }
 
 // copyImage copies the bootstrapped store image to a new temporary directory.

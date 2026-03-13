@@ -185,6 +185,8 @@ func CreateMockStore(t testing.TB, opts ...mockstore.MockTiKVStoreOption) kv.Sto
 
 // tryMakeImage tries to create a bootstraped storage, the store is used as image for testing later.
 func tryMakeImage(t testing.TB, opts ...mockstore.MockTiKVStoreOption) {
+	mockstore.ExpectedBootstrapVersion = session.CurrentBootstrapVersion
+	mockstore.CleanStaleImages(time.Hour)
 	if mockstore.ImageAvailable() {
 		return
 	}
@@ -214,7 +216,11 @@ func tryMakeImageOnce(t testing.TB) (retry bool, err error) {
 	}
 	defer func() { err = syscall.Flock(int(lock.Fd()), syscall.LOCK_UN) }()
 
-	// Now this is the only instance to do the operation.
+	// Remove any stale image before recreating.
+	if err := mockstore.RemoveImage(); err != nil {
+		return false, err
+	}
+
 	store, err := mockstore.NewMockStore(
 		mockstore.WithStoreType(mockstore.EmbedUnistore),
 		mockstore.WithPath(mockstore.ImageFilePath()))
@@ -237,9 +243,12 @@ func tryMakeImageOnce(t testing.TB) (retry bool, err error) {
 	dom.SetStatsUpdating(true)
 
 	dom.Close()
-	err = store.Close()
+	if err := store.Close(); err != nil {
+		return false, err
+	}
 
-	return false, err
+	// Write version marker so future runs can detect stale images.
+	return false, mockstore.WriteImageVersion(session.CurrentBootstrapVersion)
 }
 
 // DistExecutionContext is the context
