@@ -199,7 +199,7 @@ func tryMakeImage(t testing.TB, opts ...mockstore.MockTiKVStoreOption) {
 }
 
 func tryMakeImageOnce(t testing.TB) (retry bool, err error) {
-	const lockFile = "/tmp/tidb-unistore-bootstraped-image-lock-file"
+	lockFile := strings.TrimRight(mockstore.ImageFilePath(), "/") + ".lock"
 	lock, err := os.Create(lockFile)
 	if err != nil {
 		return true, nil
@@ -217,7 +217,7 @@ func tryMakeImageOnce(t testing.TB) (retry bool, err error) {
 	// Now this is the only instance to do the operation.
 	store, err := mockstore.NewMockStore(
 		mockstore.WithStoreType(mockstore.EmbedUnistore),
-		mockstore.WithPath(mockstore.ImageFilePath))
+		mockstore.WithPath(mockstore.ImageFilePath()))
 	if err != nil {
 		return false, err
 	}

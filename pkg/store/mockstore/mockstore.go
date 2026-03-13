@@ -15,12 +15,15 @@
 package mockstore
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"io/fs"
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/pingcap/errors"
@@ -321,16 +324,33 @@ func NewMockStore(options ...MockTiKVStoreOption) (kv.Storage, error) {
 	return store, nil
 }
 
-// ImageFilePath is used by testing, it's the file path for the bootstraped store image.
-const ImageFilePath = "/tmp/tidb-unistore-bootstraped-image/"
+// ImageFilePath returns the path to the bootstrapped store image directory.
+// It includes a hash of the source tree path to isolate images from different
+// TiDB checkouts sharing the same /tmp directory.
+func ImageFilePath() string {
+	return imageFilePath
+}
+
+// imageFilePath is computed once at init from the source file location.
+var imageFilePath string
+
+func init() {
+	_, file, _, ok := runtime.Caller(0)
+	suffix := ""
+	if ok {
+		h := sha256.Sum256([]byte(filepath.Dir(file)))
+		suffix = "-" + hex.EncodeToString(h[:8])
+	}
+	imageFilePath = filepath.Join(os.TempDir(), "tidb-unistore-bootstraped-image"+suffix) + "/"
+}
 
 // ImageAvailable checks whether the store image file is available.
 func ImageAvailable() bool {
-	_, err := os.ReadDir(ImageFilePath)
+	_, err := os.ReadDir(imageFilePath)
 	if err != nil {
 		return false
 	}
-	_, err = os.ReadDir(filepath.Join(ImageFilePath, "kv"))
+	_, err = os.ReadDir(filepath.Join(imageFilePath, "kv"))
 	return err == nil
 }
 
@@ -343,7 +363,7 @@ func copyImage() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := copyDir(ImageFilePath, dst); err != nil {
+	if err := copyDir(imageFilePath, dst); err != nil {
 		os.RemoveAll(dst)
 		return "", err
 	}
