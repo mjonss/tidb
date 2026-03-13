@@ -40,7 +40,10 @@ func New(
 			return nil, nil, nil, err
 		}
 	}
-	if strings.HasPrefix(path, spath.Join(os.TempDir(), "tidb-unistore-temp")) {
+	tmpDir := os.TempDir()
+	isTempStore := strings.HasPrefix(path, spath.Join(tmpDir, "tidb-unistore-temp"))
+	isImageCopy := strings.HasPrefix(path, spath.Join(tmpDir, "tidb-unistore-image-"))
+	if isTempStore || isImageCopy {
 		persistent = false
 	}
 
@@ -53,7 +56,9 @@ func New(
 	conf.Engine.DBPath = path
 	conf.Server.Raft = false
 
-	if !persistent {
+	// Use volatile mode only for fresh temp stores, not for image copies
+	// that need to load existing bootstrapped data from disk.
+	if isTempStore {
 		conf.Engine.VolatileMode = true
 		conf.Engine.MaxMemTableSize = 12 << 20
 		conf.Engine.SyncWrite = false

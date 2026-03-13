@@ -16,6 +16,8 @@ package mockstore
 
 import (
 	"fmt"
+	"io"
+	"io/fs"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -299,13 +301,11 @@ func NewMockStore(options ...MockTiKVStoreOption) (kv.Storage, error) {
 	case MockTiKV:
 		store, err = newMockTikvStore(&opt)
 	case EmbedUnistore:
-		// Don't do this unless we figure out why the test image does not accelerate out unit tests.
-		// if opt.path == "" && len(options) == 0 && ImageAvailable() {
-		// 	// Create the store from the image.
-		// 	if path, err := copyImage(); err == nil {
-		// 		opt.path = path
-		// 	}
-		// }
+		if opt.path == "" && len(options) == 0 && ImageAvailable() {
+			if path, err := copyImage(); err == nil {
+				opt.path = path
+			}
+		}
 
 		store, err = newUnistore(&opt)
 	default:
@@ -332,6 +332,54 @@ func ImageAvailable() bool {
 	}
 	_, err = os.ReadDir(filepath.Join(ImageFilePath, "kv"))
 	return err == nil
+}
+
+// copyImage copies the bootstrapped store image to a new temporary directory.
+// The returned path intentionally does NOT use the "tidb-unistore-temp" prefix
+// so that unistore.New opens it in persistent mode and loads the existing
+// bootstrapped data from disk.
+func copyImage() (string, error) {
+	dst, err := os.MkdirTemp("", "tidb-unistore-image-")
+	if err != nil {
+		return "", err
+	}
+	if err := copyDir(ImageFilePath, dst); err != nil {
+		os.RemoveAll(dst)
+		return "", err
+	}
+	return dst, nil
+}
+
+func copyDir(src, dst string) error {
+	return filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if d.IsDir() {
+			return os.MkdirAll(target, 0750)
+		}
+		return copyFile(path, target)
+	})
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	_, err = io.Copy(out, in)
+	return err
 }
 
 // BootstrapWithSingleStore initializes a Cluster with 1 Region and 1 Store.
