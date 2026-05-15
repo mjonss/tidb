@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/tidb/pkg/testkit/analyzehelper"
 	"github.com/pingcap/tidb/pkg/util/mathutil"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/singleflight"
 )
 
 func TestConcurrentLoadHist(t *testing.T) {
@@ -444,3 +445,146 @@ func TestSyncLoadOnObjectWhichCanNotFoundInStorage(t *testing.T) {
 	require.True(t, analyzed)
 	require.True(t, statsTbl.GetCol(tblInfo.Columns[2].ID).IsFullLoad())
 }
+
+// TestSendLoadRequestsEmptyBatch pins CONTRACT.md sync-load clause 2 ("Empty batch returns nil").
+// SendLoadRequests with an empty item slice MUST return nil and MUST NOT mutate the
+// StatementContext's StatsLoad fields. See pkg/statistics/handle/syncload/stats_syncload.go:117-119.
+func TestSendLoadRequestsEmptyBatch(t *testing.T) {
+	_, dom := testkit.CreateMockStoreAndDomain(t)
+	h := dom.StatsHandle()
+
+	stmtCtx := stmtctx.NewStmtCtx()
+	err := h.SendLoadRequests(stmtCtx, []model.StatsLoadItem{}, time.Second)
+	require.NoError(t, err)
+	require.Nil(t, stmtCtx.StatsLoad.NeededItems, "NeededItems should remain nil for empty batch")
+	require.Empty(t, stmtCtx.StatsLoad.ResultCh, "ResultCh should remain empty for empty batch")
+	require.True(t, stmtCtx.StatsLoad.LoadStartTime.IsZero(), "LoadStartTime should not be set for empty batch")
+}
+
+// TestSyncWaitStatsLoadOnEmptyNeededItems pins CONTRACT.md sync-load clause 8
+// ("SyncWaitStatsLoad no-op on empty NeededItems"). The wait MUST return nil
+// without consulting a timer or any result channel.
+// See pkg/statistics/handle/syncload/stats_syncload.go:155-157.
+func TestSyncWaitStatsLoadOnEmptyNeededItems(t *testing.T) {
+	_, dom := testkit.CreateMockStoreAndDomain(t)
+	h := dom.StatsHandle()
+
+	stmtCtx := stmtctx.NewStmtCtx()
+	// NeededItems is nil by default; explicitly assert and call.
+	require.Nil(t, stmtCtx.StatsLoad.NeededItems)
+	start := time.Now()
+	err := h.SyncWaitStatsLoad(stmtCtx)
+	require.NoError(t, err)
+	// The no-op path returns immediately. Allow a generous bound so the test is not flaky
+	// on slow CI runners, but well below any production sync-load timeout.
+	require.Less(t, time.Since(start), 100*time.Millisecond, "SyncWaitStatsLoad with empty NeededItems should return immediately")
+}
+
+// TestSyncWaitStatsLoadClearsNeededItemsOnSuccess pins CONTRACT.md sync-load clause 12
+// ("SyncWaitStatsLoad clears NeededItems on return"). After the wait completes
+// successfully, NeededItems MUST be nil so that a subsequent call is a no-op.
+// See pkg/statistics/handle/syncload/stats_syncload.go:164 (deferred clear).
+//
+// This test drives SyncWaitStatsLoad directly by populating stmtCtx with a
+// pre-delivered result channel, isolating the clear-on-return behavior from
+// the load pipeline.
+func TestSyncWaitStatsLoadClearsNeededItemsOnSuccess(t *testing.T) {
+	_, dom := testkit.CreateMockStoreAndDomain(t)
+	h := dom.StatsHandle()
+
+	item := model.StatsLoadItem{
+		TableItemID: model.TableItemID{TableID: 999999, ID: 1, IsIndex: false},
+		FullLoad:    true,
+	}
+	stmtCtx := stmtctx.NewStmtCtx()
+	stmtCtx.StatsLoad.Timeout = time.Second
+	stmtCtx.StatsLoad.NeededItems = []model.StatsLoadItem{item}
+
+	deliveredCh := make(chan singleflight.Result, 1)
+	deliveredCh <- singleflight.Result{Val: stmtctx.StatsLoadResult{Item: item.TableItemID}}
+	close(deliveredCh)
+	stmtCtx.StatsLoad.ResultCh = []<-chan singleflight.Result{deliveredCh}
+
+	err := h.SyncWaitStatsLoad(stmtCtx)
+	require.NoError(t, err)
+	require.Nil(t, stmtCtx.StatsLoad.NeededItems, "NeededItems should be cleared after SyncWaitStatsLoad returns")
+
+	// A second call MUST be a no-op (clauses 8 + 12 together).
+	err = h.SyncWaitStatsLoad(stmtCtx)
+	require.NoError(t, err)
+}
+
+// TestSyncWaitStatsLoadClearsNeededItemsOnTimeout pins CONTRACT.md sync-load clause 12
+// on the timeout path. Even when the wait returns an error, NeededItems MUST be cleared
+// so re-entry is safe.
+// See pkg/statistics/handle/syncload/stats_syncload.go:159-165 (deferred clear).
+//
+// This test drives SyncWaitStatsLoad directly with a never-delivering channel and
+// a small timeout.
+func TestSyncWaitStatsLoadClearsNeededItemsOnTimeout(t *testing.T) {
+	_, dom := testkit.CreateMockStoreAndDomain(t)
+	h := dom.StatsHandle()
+
+	item := model.StatsLoadItem{
+		TableItemID: model.TableItemID{TableID: 999999, ID: 1, IsIndex: false},
+		FullLoad:    true,
+	}
+	stmtCtx := stmtctx.NewStmtCtx()
+	stmtCtx.StatsLoad.Timeout = 10 * time.Millisecond
+	stmtCtx.StatsLoad.NeededItems = []model.StatsLoadItem{item}
+
+	neverCh := make(chan singleflight.Result)
+	stmtCtx.StatsLoad.ResultCh = []<-chan singleflight.Result{neverCh}
+
+	err := h.SyncWaitStatsLoad(stmtCtx)
+	require.Error(t, err, "SyncWaitStatsLoad should return timeout error when the result channel never delivers")
+	require.Nil(t, stmtCtx.StatsLoad.NeededItems, "NeededItems should be cleared even on timeout")
+}
+
+// TestStatsLoadItemKeyMetaVsFullDistinct pins CONTRACT.md sync-load clause 5
+// ("Meta vs full dedup separation"). Meta-load (FullLoad=false) and full-load
+// (FullLoad=true) for the same column MUST produce distinct singleflight keys
+// so they are not deduplicated against each other.
+// See pkg/parser/model/model.go `StatsLoadItem.Key()`.
+func TestStatsLoadItemKeyMetaVsFullDistinct(t *testing.T) {
+	tableID := int64(1)
+	colID := int64(2)
+	metaItem := model.StatsLoadItem{
+		TableItemID: model.TableItemID{TableID: tableID, ID: colID, IsIndex: false},
+		FullLoad:    false,
+	}
+	fullItem := model.StatsLoadItem{
+		TableItemID: model.TableItemID{TableID: tableID, ID: colID, IsIndex: false},
+		FullLoad:    true,
+	}
+	require.NotEqual(t, metaItem.Key(), fullItem.Key(),
+		"meta-load and full-load keys must differ so they are not deduplicated by singleflight")
+
+	// Sanity: same (FullLoad, IsIndex) for two distinct columns must also differ.
+	sameModeOtherCol := model.StatsLoadItem{
+		TableItemID: model.TableItemID{TableID: tableID, ID: colID + 1, IsIndex: false},
+		FullLoad:    true,
+	}
+	require.NotEqual(t, fullItem.Key(), sameModeOtherCol.Key(),
+		"distinct columns must produce distinct singleflight keys")
+
+	// Sanity: same column at column-level vs index-level must differ.
+	idxItem := model.StatsLoadItem{
+		TableItemID: model.TableItemID{TableID: tableID, ID: colID, IsIndex: true},
+		FullLoad:    true,
+	}
+	require.NotEqual(t, fullItem.Key(), idxItem.Key(),
+		"column-level and index-level items must produce distinct singleflight keys")
+}
+
+// TestGetSyncLoadConcurrencyByCPUBuckets pins CONTRACT.md sync-load clause 17
+// (worker pool sizing by CPU). The function MUST return one of the documented
+// values from the bucket table; see stats_syncload.go:55-66.
+func TestGetSyncLoadConcurrencyByCPUBuckets(t *testing.T) {
+	got := syncload.GetSyncLoadConcurrencyByCPU()
+	// All possible return values per the bucket table at stats_syncload.go:55-66.
+	allowed := map[int]struct{}{5: {}, 6: {}, 8: {}, 10: {}}
+	_, ok := allowed[got]
+	require.Truef(t, ok, "GetSyncLoadConcurrencyByCPU returned %d, which is not in the documented bucket set {5, 6, 8, 10}", got)
+}
+
