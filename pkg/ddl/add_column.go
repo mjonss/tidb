@@ -679,6 +679,11 @@ func columnDefToCol(ctx *metabuild.Context, offset int, colDef *ast.ColumnDef, o
 				}
 			case ast.ColumnOptionFulltext:
 				ctx.AppendWarning(dbterror.ErrTableCantHandleFt.FastGenByArgs())
+			case ast.ColumnOptionSRID:
+				// A geometry column is rejected by checkColumnAttributes.
+				if col.GetType() != mysql.TypeGeometry {
+					return nil, nil, dbterror.ErrWrongUsage.GenWithStackByArgs("SRID", "non-geometry column")
+				}
 			case ast.ColumnOptionCheck:
 				if !vardef.EnableCheckConstraint.Load() {
 					ctx.AppendWarning(errCheckConstraintIsOff)

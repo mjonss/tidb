@@ -1332,6 +1332,10 @@ func (p *preprocessor) checkCreateIndexGrammar(stmt *ast.CreateIndexStmt) {
 }
 
 func (p *preprocessor) checkConstraintGrammar(stmt *ast.Constraint) {
+	if stmt.Tp == ast.ConstraintSpatial {
+		p.err = dbterror.ErrUnsupportedIndexType.FastGen("SPATIAL index is not supported")
+		return
+	}
 	// Rewrite VECTOR INDEX into COLUMNAR INDEX
 	if stmt.Tp == ast.ConstraintVector {
 		if stmt.Option.Tp != ast.IndexTypeInvalid && stmt.Option.Tp != ast.IndexTypeHNSW {
